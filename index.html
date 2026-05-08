@@ -274,7 +274,7 @@ function initFirebase(url){
   try{
     const app=initializeApp({databaseURL:url},'garrisonclub');
     db=getDatabase(app);
-    const rootRef=ref(db,'/');
+    const rootRef=ref(db,'garrison/');
     onValue(rootRef,(snap)=>{
       const data=snap.val()||{};
       S.members=data.members||{};
@@ -353,7 +353,7 @@ function addMember(){
   if(members.length>=MAX_MEMBERS){alert('Maximum 38 members reached.');return;}
   const num=numRaw?parseInt(numRaw):members.length+1;
   if(members.find(m=>m.num===num)){alert('Member number '+num+' already exists.');return;}
-  const newRef=push(ref(db,'members'));
+  const newRef=push(ref(db,'garrison/members'));
   set(newRef,{id:newRef.key,num,name,phone:phone||''});
   document.getElementById('mName').value='';
   document.getElementById('mPhone').value='';
@@ -364,9 +364,9 @@ window.addMember=addMember;
 function removeMember(id){
   if(!isAdmin||!db)return;
   if(!confirm('Remove this member and all their records?'))return;
-  remove(ref(db,'members/'+id));
-  Object.entries(S.payments).forEach(([k,p])=>{if(p.memberId===id)remove(ref(db,'payments/'+k));});
-  Object.entries(S.winners).forEach(([k,w])=>{if(w.memberId===id)remove(ref(db,'winners/'+k));});
+  remove(ref(db,'garrison/members/'+id));
+  Object.entries(S.payments).forEach(([k,p])=>{if(p.memberId===id)remove(ref(db,'garrison/payments/'+k));});
+  Object.entries(S.winners).forEach(([k,w])=>{if(w.memberId===id)remove(ref(db,'garrison/winners/'+k));});
 }
 window.removeMember=removeMember;
 
@@ -379,7 +379,7 @@ function recordPayment(){
   if(!mId){alert('Please select a member.');return;}
   const existing=Object.values(S.payments).find(p=>p.memberId===mId&&p.monthIdx===monthIdx);
   if(existing){alert('Payment already recorded for this member for '+MONTHS[monthIdx]+'.');return;}
-  const newRef=push(ref(db,'payments'));
+  const newRef=push(ref(db,'garrison/payments'));
   set(newRef,{id:newRef.key,memberId:mId,monthIdx,amount:amt,date:new Date().toLocaleDateString('en-IN')});
 }
 window.recordPayment=recordPayment;
@@ -387,15 +387,15 @@ window.recordPayment=recordPayment;
 function deletePayment(id){
   if(!isAdmin||!db)return;
   if(!confirm('Delete this payment?'))return;
-  remove(ref(db,'payments/'+id));
+  remove(ref(db,'garrison/payments/'+id));
 }
 window.deletePayment=deletePayment;
 
 function quickPay(mId){
   if(!isAdmin||!db)return;
   const existing=Object.values(S.payments).find(p=>p.memberId===mId&&p.monthIdx===S.currentMonth);
-  if(existing)return;
-  const newRef=push(ref(db,'payments'));
+  if(existing){alert('Already marked as paid!');return;}
+  const newRef=push(ref(db,'garrison/payments'));
   set(newRef,{id:newRef.key,memberId:mId,monthIdx:S.currentMonth,amount:MONTHLY,date:new Date().toLocaleDateString('en-IN')});
 }
 window.quickPay=quickPay;
@@ -425,13 +425,13 @@ function assignWinner(){
   const alreadyWon=Object.values(S.winners).find(w=>w.memberId===mId);
   if(alreadyWon){alert(members.find(m=>m.id===mId)?.name+' already won in '+MONTHS[alreadyWon.monthIdx]+'.');return;}
   const monthWinner=Object.entries(S.winners).find(([k,w])=>w.monthIdx===monthIdx);
-  if(monthWinner){if(!confirm('Replace winner for '+MONTHS[monthIdx]+'?'))return;remove(ref(db,'winners/'+monthWinner[0]));}
+  if(monthWinner){if(!confirm('Replace winner for '+MONTHS[monthIdx]+'?'))return;remove(ref(db,'garrison/winners/'+monthWinner[0]));}
   const m=members.find(x=>x.id===mId);
   const pot=members.length*MONTHLY;
-  const newRef=push(ref(db,'winners'));
+  const newRef=push(ref(db,'garrison/winners'));
   set(newRef,{id:newRef.key,monthIdx,memberId:mId,memberName:m.name,phone:m.phone||'',pot,date:new Date().toLocaleDateString('en-IN')});
   const next=monthIdx<8?monthIdx+1:monthIdx;
-  set(ref(db,'currentMonth'),next);
+  set(ref(db,'garrison/currentMonth'),next);
 }
 window.assignWinner=assignWinner;
 
@@ -612,14 +612,21 @@ function renderMatrix(){
   wrap.innerHTML=h;
 }
 
-function markPaidMonth(mId,monthIdx){
+function togglePayment(mId, payKey, monthIdx, isPaid){
   if(!isAdmin||!db)return;
-  const existing=Object.values(S.payments).find(p=>p.memberId===mId&&p.monthIdx===monthIdx);
-  if(existing)return;
-  const newRef=push(ref(db,'payments'));
-  set(newRef,{id:newRef.key,memberId:mId,monthIdx,amount:MONTHLY,date:new Date().toLocaleDateString('en-IN')});
+  if(isPaid){
+    // undo payment
+    if(!confirm('Remove payment for '+MONTHS[monthIdx]+'?'))return;
+    if(payKey) remove(ref(db,'garrison/payments/'+payKey));
+  } else {
+    // mark as paid
+    const existing=Object.values(S.payments).find(p=>p.memberId===mId&&p.monthIdx===monthIdx);
+    if(existing)return;
+    const newRef=push(ref(db,'garrison/payments'));
+    set(newRef,{id:newRef.key,memberId:mId,monthIdx,amount:MONTHLY,date:new Date().toLocaleDateString('en-IN')});
+  }
 }
-window.markPaidMonth=markPaidMonth;
+window.togglePayment=togglePayment;
 
 // RENDER WINNERS
 function renderWinners(){
@@ -657,37 +664,38 @@ function renderWinners(){
 // ---- SEED DATA (runs once if Firebase is empty) ----
 async function seedDataIfEmpty(){
   if(!db) return;
-  const {ref:fbRef, get, set:fbSet, push:fbPush} = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js');
-  const snap = await get(fbRef(db,'members'));
-  if(snap.exists()) return; // already has data
+  const snap = await new Promise(resolve => {
+    const r = ref(db,'garrison/members');
+    onValue(r, resolve, {onlyOnce:true});
+  });
+  if(snap.exists()) { console.log('Data already exists, skipping seed'); return; }
 
+  console.log('Seeding data...');
   const members = [{"num": 1, "name": "Ajin Small", "phone": ""}, {"num": 2, "name": "Ajin Big", "phone": ""}, {"num": 3, "name": "Akhin", "phone": ""}, {"num": 4, "name": "Akhil Ithu", "phone": ""}, {"num": 5, "name": "Aneesh", "phone": ""}, {"num": 6, "name": "Anil", "phone": ""}, {"num": 7, "name": "Baggio", "phone": ""}, {"num": 8, "name": "Benestin", "phone": ""}, {"num": 9, "name": "Broison", "phone": ""}, {"num": 10, "name": "Cirin", "phone": ""}, {"num": 11, "name": "Denestin", "phone": ""}, {"num": 12, "name": "Danu", "phone": ""}, {"num": 13, "name": "Geego", "phone": ""}, {"num": 14, "name": "Hanok", "phone": ""}, {"num": 15, "name": "Issac", "phone": ""}, {"num": 16, "name": "Jerald", "phone": ""}, {"num": 17, "name": "Jibin", "phone": ""}, {"num": 18, "name": "Jinto P", "phone": ""}, {"num": 19, "name": "John", "phone": ""}, {"num": 20, "name": "Joy", "phone": ""}, {"num": 21, "name": "Justin", "phone": ""}, {"num": 22, "name": "Melvin", "phone": ""}, {"num": 23, "name": "Nijin", "phone": ""}, {"num": 24, "name": "Reagan", "phone": ""}, {"num": 25, "name": "Rinson", "phone": ""}, {"num": 26, "name": "Sajove", "phone": ""}, {"num": 27, "name": "Sebin", "phone": ""}, {"num": 28, "name": "Sijo", "phone": ""}, {"num": 29, "name": "Shanish", "phone": ""}, {"num": 30, "name": "Shibin", "phone": ""}, {"num": 31, "name": "Suni", "phone": ""}, {"num": 32, "name": "Terin", "phone": ""}, {"num": 33, "name": "Tijo", "phone": ""}, {"num": 34, "name": "Tinu", "phone": ""}, {"num": 35, "name": "Vibin", "phone": ""}, {"num": 36, "name": "Vijo", "phone": ""}, {"num": 37, "name": "Vinu", "phone": ""}, {"num": 38, "name": "Vinu (tinu)", "phone": ""}];
   const paymentData = [[4, 0], [5, 0], [6, 0], [6, 1], [9, 0], [23, 0], [23, 1], [24, 0], [25, 0], [27, 0], [30, 0], [30, 1], [38, 0]];
 
-  // add members
   const memberKeys = {};
   for(const m of members){
-    const nr = fbPush(fbRef(db,'members'));
-    await fbSet(nr, {id:nr.key, num:m.num, name:m.name, phone:m.phone});
+    const nr = push(ref(db,'garrison/members'));
+    await set(nr, {id:nr.key, num:m.num, name:m.name, phone:m.phone});
     memberKeys[m.num] = nr.key;
   }
 
-  // add payments
   for(const p of paymentData){
     const mKey = memberKeys[p.memberNum];
     if(!mKey) continue;
-    const nr = fbPush(fbRef(db,'payments'));
-    await fbSet(nr, {id:nr.key, memberId:mKey, monthIdx:p.monthIdx, amount:500, date:'imported'});
+    const nr = push(ref(db,'garrison/payments'));
+    await set(nr, {id:nr.key, memberId:mKey, monthIdx:p.monthIdx, amount:500, date:'imported'});
   }
 
-  await fbSet(fbRef(db,'currentMonth'), 1); // set to February (index 1) as current
-  console.log('Seed data loaded!');
+  await set(ref(db,'garrison/currentMonth'), 1);
+  console.log('Seed complete!');
 }
 
 initFirebase(FIREBASE_URL);
 renderDashboard();
 // Call seed after short delay to ensure db is ready
-setTimeout(seedDataIfEmpty, 2000);
+setTimeout(seedDataIfEmpty, 3000);
 </script>
 </body>
 </html>
