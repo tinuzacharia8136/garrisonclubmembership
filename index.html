@@ -126,9 +126,9 @@ body.readonly .admin-only{display:none!important}
     </div>
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
       <div class="nav">
-        <button class="active" onclick="showPage('dashboard')">&#9632; Dashboard</button>
+        <button class="active" onclick="showPage('matrix')">&#128203; Payment Matrix</button>
+        <button onclick="showPage('dashboard')">&#9632; Dashboard</button>
         <button onclick="showPage('members')">&#128100; Members</button>
-        <button onclick="showPage('matrix')">&#128203; Payment Matrix</button>
         
       </div>
       <div id="authBtn" class="viewer-badge" onclick="handleAuthClick()">&#128274; View Only</div>
@@ -141,7 +141,7 @@ body.readonly .admin-only{display:none!important}
   </div>
 
   <!-- DASHBOARD -->
-  <div id="page-dashboard" class="page active">
+  <div id="page-dashboard" class="page">
 
   <!-- QR CODE PAYMENT SECTION -->
   <div id="qrSection" class="card" style="margin-bottom:1rem">
@@ -207,9 +207,11 @@ body.readonly .admin-only{display:none!important}
   </div>
 
   <!-- PAYMENT MATRIX -->
-  <div id="page-matrix" class="page">
+  <div id="page-matrix" class="page active">
+    <div id="matrixStatsBar" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:1rem"></div>
     <div class="card">
-      <h3>&#128203; Full Payment Matrix — All Members &times; All Months</h3>
+      <h3>&#128203; Full Payment Matrix — All Members &times; All Months &nbsp;<span style="font-size:11px;color:var(--green);font-weight:500">&#9679; Live</span></h3>
+      <div style="font-size:12px;color:var(--text2);margin-top:-6px;margin-bottom:10px">Admin: click &#10007; to mark paid &bull; click &#10003; to undo</div>
       <div class="matrix-wrap" id="matrixWrap">
         <div class="empty"><span class="spinner"></span> Loading...</div>
       </div>
@@ -339,16 +341,39 @@ window.closeLogin=closeLogin;
 function showPage(p){
   document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));
   document.getElementById('page-'+p).classList.add('active');
-  document.querySelectorAll('.nav button').forEach((b,i)=>b.classList.toggle('active',['dashboard','members','matrix'][i]===p));
+  document.querySelectorAll('.nav button').forEach((b,i)=>b.classList.toggle('active',['matrix','dashboard','members'][i]===p));
   renderAll();
 }
 window.showPage=showPage;
 
 function renderAll(){
+  // Always re-render the active page for real-time updates
   const active=document.querySelector('.page.active');
   if(!active)return;
   const id=active.id.replace('page-','');
-  ({dashboard:renderDashboard,members:renderMembers,matrix:renderMatrix}[id] || renderDashboard)();
+  ({dashboard:renderDashboard,members:renderMembers,matrix:renderMatrix}[id] || renderMatrix)();
+  // Also update stats bar on dashboard if visible
+  if(id==='matrix'){
+    updateMatrixStats();
+  }
+}
+
+function updateMatrixStats(){
+  // Update the quick summary bar above matrix if it exists
+  const bar=document.getElementById('matrixStatsBar');
+  if(!bar)return;
+  const members=Object.values(S.members);
+  const payments=Object.values(S.payments);
+  const totalPaid=payments.reduce((a,p)=>a+p.amount,0);
+  const paidThisMonth=payments.filter(p=>p.monthIdx===S.currentMonth).length;
+  const unpaid=members.length-paidThisMonth;
+  bar.innerHTML=`
+    <div class="stat"><div class="lbl">Members</div><div class="val blue">${members.length}/38</div></div>
+    <div class="stat"><div class="lbl">Current Month</div><div class="val amber">${MONTHS[S.currentMonth]}</div></div>
+    <div class="stat"><div class="lbl">Paid This Month</div><div class="val green">&#8377;${(paidThisMonth*MONTHLY).toLocaleString('en-IN')}</div></div>
+    <div class="stat"><div class="lbl">Unpaid</div><div class="val ${unpaid>0?'red':'green'}">${unpaid}</div></div>
+    <div class="stat"><div class="lbl">Total Collected</div><div class="val green">&#8377;${totalPaid.toLocaleString('en-IN')}</div></div>
+  `;
 }
 
 // MEMBERS
@@ -619,6 +644,7 @@ function renderMatrix(){
   });
   h+=`</tbody></table>`;
   wrap.innerHTML=h;
+  updateMatrixStats();
 }
 
 function togglePayment(mId, payKey, monthIdx, isPaid){
@@ -707,7 +733,7 @@ if(isAdmin){
   document.getElementById('viewerNotice').style.display='none';
 }
 initFirebase(FIREBASE_URL);
-renderDashboard();
+renderMatrix();
 // Call seed after short delay to ensure db is ready
 setTimeout(seedDataIfEmpty, 3000);
 </script>
