@@ -134,15 +134,15 @@ body.readonly .admin-only{display:none!important}
       <div id="authBtn" class="viewer-badge" onclick="handleAuthClick()">&#128274; View Only</div>
     </div>
   </div>
-
+ 
   <div id="viewerNotice" class="info-bar" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
     <span>&#128274; <strong>View Only</strong> mode — all payment data is visible. Editing is for admin only.</span>
     <button class="btn sm" onclick="handleAuthClick()">Admin Login</button>
   </div>
-
+ 
   <!-- DASHBOARD -->
   <div id="page-dashboard" class="page">
-
+ 
   <!-- PAYMENT SECTION -->
   <div id="paySection" class="card" style="margin-bottom:1rem">
     <h3>&#128176; Pay Membership — &#8377;500/month</h3>
@@ -164,7 +164,7 @@ body.readonly .admin-only{display:none!important}
       </div>
     </div>
   </div>
-
+ 
     <div class="stats" id="stats"></div>
     <div class="row2">
       <div class="card">
@@ -174,7 +174,7 @@ body.readonly .admin-only{display:none!important}
       <div class="card">
         <h3>&#128200; <span id="curMonthLabel">Current Month</span> Status</h3>
         <div id="monthSummary"></div>
-
+ 
       </div>
     </div>
     <div class="card">
@@ -182,7 +182,7 @@ body.readonly .admin-only{display:none!important}
       <div id="pendingList"></div>
     </div>
   </div>
-
+ 
   <!-- MEMBERS -->
   <div id="page-members" class="page">
     <div class="card admin-only">
@@ -206,7 +206,7 @@ body.readonly .admin-only{display:none!important}
       </div>
     </div>
   </div>
-
+ 
   <!-- PAYMENT MATRIX -->
   <div id="page-matrix" class="page active">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:1rem;padding:14px 18px;background:var(--bg);border:0.5px solid var(--border);border-radius:var(--radius-lg)">
@@ -245,10 +245,10 @@ body.readonly .admin-only{display:none!important}
       </div>
     </div>
   </div>
-
+ 
   <div class="footer">Garrison Club &bull; Membership Fund 2026 &bull; 38 Members &times; &#8377;500 &times; 9 Months &bull; Total Fund: &#8377;1,71,000</div>
 </div>
-
+ 
 <!-- LOGIN -->
 <div id="loginOverlay" class="login-overlay" style="display:none">
   <div class="login-box">
@@ -261,32 +261,32 @@ body.readonly .admin-only{display:none!important}
     <button class="btn" style="width:100%;margin-top:8px;font-size:12px" onclick="closeLogin()">Cancel</button>
   </div>
 </div>
-
+ 
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getDatabase, ref, set, onValue, remove, push, update } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
-
+ 
 const FIREBASE_URL='https://it-fund-23913-default-rtdb.asia-southeast1.firebasedatabase.app';
 const ADMIN_PASS='GarrisonbyTinu';
 const MAX_MEMBERS=38;
 const MONTHLY=500;
 const MONTHS=['January','February','March','April','May','June','July','August','September'];
 const MONTH_KEYS=['jan','feb','mar','apr','may','jun','jul','aug','sep'];
-
+ 
 let isAdmin=sessionStorage.getItem('garrison_admin')==='true';
 if(isAdmin){
   document.body.classList.remove('readonly');
 }
 let db=null;
 let S={members:{},payments:{},winners:{},currentMonth:0};
-
+ 
 function getCurrentMonthIndex(){
   const m=new Date().getMonth(); // 0=Jan, real system month
   if(m>=8) return 8;
   if(m<0) return 0;
   return m; // May 2026 = index 4
 }
-
+ 
 function initFirebase(url){
   try{
     const app=initializeApp({databaseURL:url},'garrisonclub');
@@ -297,13 +297,14 @@ function initFirebase(url){
       S.members=data.members||{};
       S.payments=data.payments||{};
       S.winners=data.winners||{};
-      S.currentMonth=data.currentMonth!=null?data.currentMonth:getCurrentMonthIndex();
+      // Always use real system month (0=Jan, 4=May, 8=Sep), capped to 0-8
+      S.currentMonth=getCurrentMonthIndex();
       renderAll();
       populateSelects();
     });
   }catch(e){alert('Firebase error: '+e.message);}
 }
-
+ 
 // AUTH
 function handleAuthClick(){
   if(isAdmin){
@@ -324,7 +325,7 @@ function handleAuthClick(){
   }
 }
 window.handleAuthClick=handleAuthClick;
-
+ 
 function doLogin(){
   if(document.getElementById('pwInput').value===ADMIN_PASS){
     isAdmin=true;
@@ -344,7 +345,7 @@ function doLogin(){
 window.doLogin=doLogin;
 function closeLogin(){document.getElementById('loginOverlay').style.display='none';}
 window.closeLogin=closeLogin;
-
+ 
 // NAV
 function showPage(p){
   document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));
@@ -353,7 +354,7 @@ function showPage(p){
   renderAll();
 }
 window.showPage=showPage;
-
+ 
 function renderAll(){
   // Always re-render the active page for real-time updates
   const active=document.querySelector('.page.active');
@@ -365,7 +366,7 @@ function renderAll(){
     updateMatrixStats();
   }
 }
-
+ 
 function updateMatrixStats(){
   // Update the quick summary bar above matrix if it exists
   const bar=document.getElementById('matrixStatsBar');
@@ -383,7 +384,7 @@ function updateMatrixStats(){
     <div class="stat"><div class="lbl">Total Collected</div><div class="val green">&#8377;${totalPaid.toLocaleString('en-IN')}</div></div>
   `;
 }
-
+ 
 // MEMBERS
 function addMember(){
   if(!isAdmin||!db)return;
@@ -402,7 +403,7 @@ function addMember(){
   document.getElementById('mNum').value='';
 }
 window.addMember=addMember;
-
+ 
 function removeMember(id){
   if(!isAdmin||!db)return;
   if(!confirm('Remove this member and all their records?'))return;
@@ -411,7 +412,7 @@ function removeMember(id){
   Object.entries(S.winners).forEach(([k,w])=>{if(w.memberId===id)remove(ref(db,'garrison/winners/'+k));});
 }
 window.removeMember=removeMember;
-
+ 
 // PAYMENTS
 function recordPayment(){
   if(!isAdmin||!db)return;
@@ -425,14 +426,14 @@ function recordPayment(){
   set(newRef,{id:newRef.key,memberId:mId,monthIdx,amount:amt,date:new Date().toLocaleDateString('en-IN')});
 }
 window.recordPayment=recordPayment;
-
+ 
 function deletePayment(id){
   if(!isAdmin||!db)return;
   if(!confirm('Delete this payment?'))return;
   remove(ref(db,'garrison/payments/'+id));
 }
 window.deletePayment=deletePayment;
-
+ 
 function quickPay(mId){
   if(!isAdmin||!db)return;
   const existing=Object.values(S.payments).find(p=>p.memberId===mId&&p.monthIdx===S.currentMonth);
@@ -441,7 +442,7 @@ function quickPay(mId){
   set(newRef,{id:newRef.key,memberId:mId,monthIdx:S.currentMonth,amount:MONTHLY,date:new Date().toLocaleDateString('en-IN')});
 }
 window.quickPay=quickPay;
-
+ 
 function remindAllUnpaid(){
   if(!isAdmin)return;
   const members=Object.values(S.members);
@@ -456,7 +457,7 @@ function remindAllUnpaid(){
   });
 }
 window.remindAllUnpaid=remindAllUnpaid;
-
+ 
 // WINNERS
 function assignWinner(){
   if(!isAdmin||!db)return;
@@ -476,7 +477,7 @@ function assignWinner(){
   set(ref(db,'garrison/currentMonth'),next);
 }
 window.assignWinner=assignWinner;
-
+ 
 // SELECTS
 function populateSelects(){
   const members=Object.values(S.members).sort((a,b)=>a.num-b.num);
@@ -495,7 +496,7 @@ function populateSelects(){
   const el=document.getElementById('curMonthRemindLabel');
   if(el)el.textContent=MONTHS[S.currentMonth];
 }
-
+ 
 // RENDER DASHBOARD
 function renderDashboard(){
   const members=Object.values(S.members);
@@ -505,7 +506,7 @@ function renderDashboard(){
   const paidThisMonth=payments.filter(p=>p.monthIdx===curM).length;
   const unpaid=members.length-paidThisMonth;
   const totalCollected=payments.reduce((a,p)=>a+p.amount,0);
-
+ 
   const expectedTotal=members.length*MONTHLY*(curM+1);
   const collectionPct=expectedTotal>0?Math.round(totalCollected/expectedTotal*100):0;
   document.getElementById('stats').innerHTML=`
@@ -518,7 +519,7 @@ function renderDashboard(){
     <div class="stat"><div class="lbl">Unpaid This Month</div><div class="val ${unpaid>0?'red':'green'}">${unpaid}</div></div>
     <div class="stat"><div class="lbl">Full Fund (9 mo)</div><div class="val blue">&#8377;${(members.length*MONTHLY*9).toLocaleString('en-IN')}</div></div>
   `;
-
+ 
   // month grid
   const wg=document.getElementById('monthGrid');
   wg.innerHTML='';
@@ -527,10 +528,10 @@ function renderDashboard(){
     const cls=i===curM?'current':i<curM?'done':'future';
     wg.innerHTML+=`<div class="month-cell ${cls}" title="${mn}${w?' — '+w.memberName:''}">${mn.slice(0,3)}</div>`;
   });
-
+ 
   // labels
   ['curMonthLabel','wkInput2','pendingMonthLabel'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent=MONTHS[curM];});
-
+ 
   // month summary
   const winW=winners.find(w=>w.monthIdx===curM);
   const pct=members.length>0?Math.round(paidThisMonth/members.length*100):0;
@@ -549,7 +550,7 @@ function renderDashboard(){
       <div style="font-weight:700;font-size:22px;color:var(--blue)">&#8377;${winW.pot.toLocaleString('en-IN')}</div></div>
     </div>`:`<div style="font-size:13px;color:var(--text3);padding:4px 0">No winner assigned for ${MONTHS[curM]} yet.</div>`}
   `;
-
+ 
   // pending
   const pending=members.filter(m=>!payments.find(p=>p.memberId===m.id&&p.monthIdx===curM));
   const pl=document.getElementById('pendingList');
@@ -566,13 +567,13 @@ function renderDashboard(){
   h+='</tbody></table></div>';
   pl.innerHTML=h;
 }
-
+ 
 // RENDER MEMBERS
 function renderMembers(){
   const members=Object.values(S.members).sort((a,b)=>a.num-b.num);
   const payments=Object.values(S.payments);
   document.getElementById('memberCount').textContent=members.length;
-
+ 
   // totals bar
   const totalPaid=payments.reduce((a,p)=>a+p.amount,0);
   const fullyPaid=members.filter(m=>payments.filter(p=>p.memberId===m.id).length===9).length;
@@ -585,7 +586,7 @@ function renderMembers(){
     <div class="stat"><div class="lbl">Fully Up to Date</div><div class="val green">${allClear} members</div></div>
     <div class="stat"><div class="lbl">Completed (9/9)</div><div class="val blue">${fullyPaid} members</div></div>
   `;
-
+ 
   const tb=document.getElementById('memberTable');
   if(!members.length){tb.innerHTML='<tr><td colspan="8" class="empty">No members yet.</td></tr>';return;}
   const totalPaidAll=payments.reduce((a,p)=>a+p.amount,0);
@@ -626,7 +627,7 @@ function renderMembers(){
     <td class="admin-only"></td>
   </tr>`;
 }
-
+ 
 // RENDER MATRIX
 function renderMatrix(){
   populateSelects();
@@ -689,7 +690,7 @@ function renderMatrix(){
   wrap.innerHTML=h;
   updateMatrixStats();
 }
-
+ 
 function togglePayment(mId, payKey, monthIdx, isPaid){
   if(!isAdmin||!db)return;
   if(isPaid){
@@ -704,7 +705,7 @@ function togglePayment(mId, payKey, monthIdx, isPaid){
   }
 }
 window.togglePayment=togglePayment;
-
+ 
 function updateMember(id, field, value){
   if(!isAdmin||!db)return;
   const updates={};
@@ -714,7 +715,7 @@ function updateMember(id, field, value){
   set(ref(db,'garrison/members/'+id+'/'+field), value.trim());
 }
 window.updateMember=updateMember;
-
+ 
 // RENDER WINNERS
 function renderWinners(){
   const members=Object.values(S.members);
@@ -746,8 +747,8 @@ function renderWinners(){
     ?toWin.sort((a,b)=>a.num-b.num).map(m=>`<span class="tag">${m.num}. ${m.name}</span>`).join('')
     :'<span style="font-size:13px;color:var(--green)">&#10003; All members have won!</span>';
 }
-
-
+ 
+ 
 // ---- SEED DATA (runs once if Firebase is empty) ----
 async function seedDataIfEmpty(){
   if(!db) return;
@@ -756,29 +757,29 @@ async function seedDataIfEmpty(){
     onValue(r, resolve, {onlyOnce:true});
   });
   if(snap.exists()) { console.log('Data already exists, skipping seed'); return; }
-
+ 
   console.log('Seeding data...');
   const members = [{"num": 1, "name": "Ajin Small", "phone": ""}, {"num": 2, "name": "Ajin Big", "phone": ""}, {"num": 3, "name": "Akhin", "phone": ""}, {"num": 4, "name": "Akhil Ithu", "phone": ""}, {"num": 5, "name": "Aneesh", "phone": ""}, {"num": 6, "name": "Anil", "phone": ""}, {"num": 7, "name": "Baggio", "phone": ""}, {"num": 8, "name": "Benestin", "phone": ""}, {"num": 9, "name": "Broison", "phone": ""}, {"num": 10, "name": "Cirin", "phone": ""}, {"num": 11, "name": "Denestin", "phone": ""}, {"num": 12, "name": "Danu", "phone": ""}, {"num": 13, "name": "Geego", "phone": ""}, {"num": 14, "name": "Hanok", "phone": ""}, {"num": 15, "name": "Issac", "phone": ""}, {"num": 16, "name": "Jerald", "phone": ""}, {"num": 17, "name": "Jibin", "phone": ""}, {"num": 18, "name": "Jinto P", "phone": ""}, {"num": 19, "name": "John", "phone": ""}, {"num": 20, "name": "Joy", "phone": ""}, {"num": 21, "name": "Justin", "phone": ""}, {"num": 22, "name": "Melvin", "phone": ""}, {"num": 23, "name": "Nijin", "phone": ""}, {"num": 24, "name": "Reagan", "phone": ""}, {"num": 25, "name": "Rinson", "phone": ""}, {"num": 26, "name": "Sajove", "phone": ""}, {"num": 27, "name": "Sebin", "phone": ""}, {"num": 28, "name": "Sijo", "phone": ""}, {"num": 29, "name": "Shanish", "phone": ""}, {"num": 30, "name": "Shibin", "phone": ""}, {"num": 31, "name": "Suni", "phone": ""}, {"num": 32, "name": "Terin", "phone": ""}, {"num": 33, "name": "Tijo", "phone": ""}, {"num": 34, "name": "Tinu", "phone": ""}, {"num": 35, "name": "Vibin", "phone": ""}, {"num": 36, "name": "Vijo", "phone": ""}, {"num": 37, "name": "Vinu", "phone": ""}, {"num": 38, "name": "Vinu (tinu)", "phone": ""}];
   const paymentData = [[4, 0], [5, 0], [6, 0], [6, 1], [9, 0], [23, 0], [23, 1], [24, 0], [25, 0], [27, 0], [30, 0], [30, 1], [38, 0]];
-
+ 
   const memberKeys = {};
   for(const m of members){
     const nr = push(ref(db,'garrison/members'));
     await set(nr, {id:nr.key, num:m.num, name:m.name, phone:m.phone});
     memberKeys[m.num] = nr.key;
   }
-
+ 
   for(const p of paymentData){
     const mKey = memberKeys[p.memberNum];
     if(!mKey) continue;
     const nr = push(ref(db,'garrison/payments'));
     await set(nr, {id:nr.key, memberId:mKey, monthIdx:p.monthIdx, amount:500, date:'imported'});
   }
-
+ 
   await set(ref(db,'garrison/currentMonth'), 4); // May (0=Jan, 4=May)
   console.log('Seed complete!');
 }
-
+ 
 // Restore admin UI state if session active
 if(isAdmin){
   document.getElementById('authBtn').className='admin-badge';
