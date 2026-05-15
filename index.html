@@ -200,7 +200,7 @@ body.readonly .admin-only{display:none!important}
       <h3>&#128100; All Members (<span id="memberCount">0</span> / 38)</h3>
       <div style="overflow-x:auto">
         <table>
-          <thead><tr><th>#</th><th>Name</th><th>Phone</th><th>Jan–Sep (&#9679;=paid &#9679;=unpaid)</th><th>Months</th><th>Total Paid</th><th>Outstanding</th><th class="admin-only"></th></tr></thead>
+          <thead><tr><th>#</th><th>Name</th><th>Phone</th><th>Months Paid</th><th>Total Paid</th><th>Outstanding</th><th class="admin-only"></th></tr></thead>
           <tbody id="memberTable"><tr><td colspan="8" class="empty"><span class="spinner"></span> Loading...</td></tr></tbody>
         </table>
       </div>
@@ -264,7 +264,7 @@ body.readonly .admin-only{display:none!important}
 
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import { getDatabase, ref, set, onValue, remove, push } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
+import { getDatabase, ref, set, onValue, remove, push, update } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
 
 const FIREBASE_URL='https://it-fund-23913-default-rtdb.asia-southeast1.firebasedatabase.app';
 const ADMIN_PASS='GarrisonbyTinu';
@@ -281,12 +281,10 @@ let db=null;
 let S={members:{},payments:{},winners:{},currentMonth:0};
 
 function getCurrentMonthIndex(){
-  // Jan=0 to Sep=8, but our fund started Jan 2026
-  // If current real month > Sep, show Sep as last
-  const m=new Date().getMonth(); // 0=Jan
-  if(m>=8) return 8; // Sep is max
+  const m=new Date().getMonth(); // 0=Jan, real system month
+  if(m>=8) return 8;
   if(m<0) return 0;
-  return m;
+  return m; // May 2026 = index 4
 }
 
 function initFirebase(url){
@@ -598,26 +596,30 @@ function renderMembers(){
   tb.innerHTML=members.map(m=>{
     const paid=payments.filter(p=>p.memberId===m.id).length;
     const owed=Math.max(0,(S.currentMonth-paid)*MONTHLY);
-    const removeBtn=isAdmin?`<button class="btn sm danger" onclick="removeMember('${m.id}')">Remove</button>`:'';
-    const dots=MONTHS.map((_,i)=>{
-      const hasPaid=!!payments.find(p=>p.memberId===m.id&&p.monthIdx===i);
-      if(i>S.currentMonth) return `<span title="${MONTHS[i]}" style="display:inline-block;width:14px;height:14px;border-radius:50%;background:var(--bg3);border:0.5px solid var(--border);margin:1px"></span>`;
-      return hasPaid
-        ? `<span title="${MONTHS[i]} ✓" style="display:inline-block;width:14px;height:14px;border-radius:50%;background:var(--green);margin:1px"></span>`
-        : `<span title="${MONTHS[i]} ✗" style="display:inline-block;width:14px;height:14px;border-radius:50%;background:var(--red);margin:1px"></span>`;
-    }).join('');
-    return `<tr>
-      <td style="font-weight:700;color:var(--text2)">${m.num}</td>
-      <td style="font-weight:500;white-space:nowrap">${m.name}</td>
-      <td style="color:var(--text2);white-space:nowrap">${m.phone||'—'}</td>
-      <td><div style="display:flex;flex-wrap:wrap;gap:1px;align-items:center">${dots}</div></td>
-      <td style="font-weight:600">${paid} / 9</td>
-      <td style="color:var(--green);font-weight:600">&#8377;${(paid*MONTHLY).toLocaleString('en-IN')}</td>
-      <td style="color:${owed>0?'var(--red)':'var(--green)'};font-weight:600">${owed>0?'&#8377;'+owed.toLocaleString('en-IN'):'&#10003; Clear'}</td>
-      <td class="admin-only">${removeBtn}</td>
-    </tr>`;
+    if(isAdmin){
+      return `<tr>
+        <td style="font-weight:700;color:var(--text2)">${m.num}</td>
+        <td><input value="${m.name}" onblur="updateMember('${m.id}','name',this.value)" style="height:30px;font-weight:600;min-width:120px"/></td>
+        <td><input value="${m.phone||''}" placeholder="+91..." onblur="updateMember('${m.id}','phone',this.value)" style="height:30px;min-width:130px"/></td>
+        <td style="font-weight:600">${paid} / 9</td>
+        <td style="color:var(--green);font-weight:600">&#8377;${(paid*MONTHLY).toLocaleString('en-IN')}</td>
+        <td style="color:${owed>0?'var(--red)':'var(--green)'};font-weight:600">${owed>0?'&#8377;'+owed.toLocaleString('en-IN'):'&#10003; Clear'}</td>
+        <td><button class="btn sm danger" onclick="removeMember('${m.id}')">Remove</button></td>
+      </tr>`;
+    } else {
+      const ph=m.phone?m.phone.replace(/\D/g,''):'';
+      const wa=ph?`<a href="https://wa.me/${ph}" target="_blank" style="color:#25D366;font-size:12px;margin-left:6px">&#128241;</a>`:'';
+      return `<tr>
+        <td style="font-weight:700;color:var(--text2)">${m.num}</td>
+        <td style="font-weight:600">${m.name}</td>
+        <td style="color:var(--text2)">${m.phone||'—'}${wa}</td>
+        <td style="font-weight:600">${paid} / 9</td>
+        <td style="color:var(--green);font-weight:600">&#8377;${(paid*MONTHLY).toLocaleString('en-IN')}</td>
+        <td style="color:${owed>0?'var(--red)':'var(--green)'};font-weight:600">${owed>0?'&#8377;'+owed.toLocaleString('en-IN'):'&#10003; Clear'}</td>
+      </tr>`;
+    }
   }).join('')+`<tr style="background:var(--bg2);font-weight:700">
-    <td colspan="4" style="font-weight:700;color:var(--text2)">TOTAL (${members.length} members)</td>
+    <td colspan="3" style="font-weight:700;color:var(--text2)">TOTAL (${members.length} members)</td>
     <td style="color:var(--blue)">${payments.length} payments</td>
     <td style="color:var(--green)">&#8377;${totalPaidAll.toLocaleString('en-IN')}</td>
     <td style="color:${totalOwedAll>0?'var(--red)':'var(--green)'}">&#8377;${totalOwedAll.toLocaleString('en-IN')} owed</td>
@@ -631,27 +633,58 @@ function renderMatrix(){
   const members=Object.values(S.members).sort((a,b)=>a.num-b.num);
   const payments=Object.values(S.payments);
   const wrap=document.getElementById('matrixWrap');
-  if(!members.length){wrap.innerHTML='<div class="empty">No members yet.</div>';return;}
-  let h=`<table class="matrix"><thead><tr><th class="name-cell">#  Name</th>`;
-  MONTHS.forEach((mn,i)=>h+=`<th style="${i===S.currentMonth?'color:var(--blue)':''}">${mn.slice(0,3)}</th>`);
-  h+=`<th>Total</th></tr></thead><tbody>`;
+  if(!members.length){wrap.innerHTML='<div class="empty">No members added yet.</div>';return;}
+  let h=`<table class="matrix"><thead><tr><th class="name-cell" style="min-width:150px">Member</th>`;
+  MONTHS.forEach((mn,i)=>{
+    const isCur=i===S.currentMonth;
+    h+=`<th style="text-align:center;${isCur?'color:var(--blue);font-weight:800;border-bottom:2px solid var(--blue)':''}">${mn.slice(0,3)}</th>`;
+  });
+  h+=`<th style="text-align:center">Total</th></tr></thead><tbody>`;
   members.forEach(m=>{
-    const paidMonths=MONTHS.map((_,i)=>!!payments.find(p=>p.memberId===m.id&&p.monthIdx===i));
-    const total=paidMonths.filter(Boolean).length;
-    h+=`<tr><td class="name-cell matrix">${m.num}. ${m.name}</td>`;
-    paidMonths.forEach((paid,i)=>{
-      if(i>S.currentMonth){h+=`<td><span class="cell-future">—</span></td>`;}
-      else if(paid){h+=`<td><span class="cell-paid">&#10003;</span></td>`;}
-      else{
-        const ph=m.phone?m.phone.replace(/\D/g,''):'';
-        const msg=encodeURIComponent('Hi '+m.name+', reminder to pay \u20b9'+MONTHLY+' for Garrison Club — '+MONTHS[i]+' 2026.');
-        const wa=ph&&isAdmin?`<a href="https://wa.me/${ph}?text=${msg}" target="_blank" style="color:#25D366;font-size:11px;">&#128241;</a>`:'';
-        const mpBtn=isAdmin?`<span style="cursor:pointer;color:var(--red);font-size:11px" onclick="markPaidMonth('${m.id}',${i})">&#10007;</span>`:`<span class="cell-unpaid">&#10007;</span>`;
-        h+=`<td style="display:flex;gap:3px;align-items:center;justify-content:center">${mpBtn}${wa}</td>`;
+    const memberPayments=payments.filter(p=>p.memberId===m.id);
+    const total=memberPayments.length;
+    const allClear=total>=(S.currentMonth+1);
+    h+=`<tr>`;
+    h+=`<td class="name-cell"><span style="color:var(--text2);font-size:11px;margin-right:4px">${m.num}.</span><strong>${m.name}</strong></td>`;
+    MONTHS.forEach((_,i)=>{
+      const payRec=Object.entries(S.payments).find(([k,p])=>p.memberId===m.id&&p.monthIdx===i);
+      const paid=!!payRec;
+      const payKey=payRec?payRec[0]:'';
+      if(i>S.currentMonth){
+        h+=`<td style="text-align:center;color:var(--text3)">—</td>`;
+      } else if(paid){
+        if(isAdmin){
+          h+=`<td style="text-align:center"><span class="cell-paid" style="cursor:pointer;padding:3px 8px;border-radius:4px;display:inline-block" title="Click to undo" onclick="togglePayment('${m.id}','${payKey}',${i},true)">✓</span></td>`;
+        } else {
+          h+=`<td style="text-align:center"><span class="cell-paid" style="padding:3px 8px;border-radius:4px;display:inline-block">✓</span></td>`;
+        }
+      } else {
+        if(isAdmin){
+          const ph=m.phone?m.phone.replace(/\D/g,''):'';
+          const msg=encodeURIComponent('Hi '+m.name+', please pay \u20b9500 for Garrison Club Membership — '+MONTHS[i]+' 2026. Pay here: upi://pay?pa=melbumelvin@okaxis&am=500');
+          const wa=ph?` <a href="https://wa.me/${ph}?text=${msg}" target="_blank" style="color:#25D366;font-size:10px;text-decoration:none" title="Send WhatsApp reminder">&#128241;</a>`:'';
+          h+=`<td style="text-align:center"><span class="cell-unpaid" style="cursor:pointer;padding:3px 8px;border-radius:4px;display:inline-block" title="Click to mark paid" onclick="togglePayment('${m.id}','',${i},false)">✗</span>${wa}</td>`;
+        } else {
+          h+=`<td style="text-align:center"><span class="cell-unpaid" style="padding:3px 8px;border-radius:4px;display:inline-block">✗</span></td>`;
+        }
       }
     });
-    h+=`<td style="font-weight:600;color:var(--blue)">${total}/9</td></tr>`;
+    const color=total===0?'var(--red)':!allClear?'var(--amber)':'var(--green)';
+    h+=`<td style="text-align:center;font-weight:700;color:${color}">${total}/9<br/><span style="font-size:10px;color:var(--green)">&#8377;${(total*MONTHLY).toLocaleString('en-IN')}</span></td>`;
+    h+=`</tr>`;
   });
+  // Summary row
+  h+=`<tr style="background:var(--bg2)"><td class="name-cell" style="font-weight:700;color:var(--text2)">TOTAL</td>`;
+  MONTHS.forEach((_,i)=>{
+    const cnt=payments.filter(p=>p.monthIdx===i).length;
+    if(i>S.currentMonth){h+=`<td style="text-align:center;color:var(--text3)">—</td>`;}
+    else{
+      const color=cnt===members.length?'var(--green)':cnt===0?'var(--red)':'var(--amber)';
+      h+=`<td style="text-align:center;font-weight:700;color:${color};font-size:12px">${cnt}/${members.length}</td>`;
+    }
+  });
+  const grand=payments.reduce((a,p)=>a+p.amount,0);
+  h+=`<td style="text-align:center;font-weight:700;color:var(--green)">&#8377;${grand.toLocaleString('en-IN')}</td></tr>`;
   h+=`</tbody></table>`;
   wrap.innerHTML=h;
   updateMatrixStats();
@@ -671,6 +704,16 @@ function togglePayment(mId, payKey, monthIdx, isPaid){
   }
 }
 window.togglePayment=togglePayment;
+
+function updateMember(id, field, value){
+  if(!isAdmin||!db)return;
+  const updates={};
+  updates[field]=value.trim();
+  const {update} = window._fbUpdate || {};
+  // use set on specific field
+  set(ref(db,'garrison/members/'+id+'/'+field), value.trim());
+}
+window.updateMember=updateMember;
 
 // RENDER WINNERS
 function renderWinners(){
