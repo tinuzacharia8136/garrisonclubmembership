@@ -261,13 +261,20 @@ const MONTHLY=500;
 const MONTHS=['January','February','March','April','May','June','July','August','September'];
 const MONTH_KEYS=['jan','feb','mar','apr','may','jun','jul','aug','sep'];
 
-let isAdmin=false;
+let isAdmin=sessionStorage.getItem('garrison_admin')==='true';
+if(isAdmin){
+  document.body.classList.remove('readonly');
+}
 let db=null;
 let S={members:{},payments:{},winners:{},currentMonth:0};
 
 function getCurrentMonthIndex(){
+  // Jan=0 to Sep=8, but our fund started Jan 2026
+  // If current real month > Sep, show Sep as last
   const m=new Date().getMonth(); // 0=Jan
-  return Math.min(Math.max(m,0),8); // clamp to 0-8
+  if(m>=8) return 8; // Sep is max
+  if(m<0) return 0;
+  return m;
 }
 
 function initFirebase(url){
@@ -292,6 +299,7 @@ function handleAuthClick(){
   if(isAdmin){
     if(confirm('Log out of admin mode?')){
       isAdmin=false;
+      sessionStorage.removeItem('garrison_admin');
       document.body.classList.add('readonly');
       document.getElementById('authBtn').className='viewer-badge';
       document.getElementById('authBtn').innerHTML='&#128274; View Only';
@@ -310,6 +318,7 @@ window.handleAuthClick=handleAuthClick;
 function doLogin(){
   if(document.getElementById('pwInput').value===ADMIN_PASS){
     isAdmin=true;
+    sessionStorage.setItem('garrison_admin','true');
     document.body.classList.remove('readonly');
     document.getElementById('authBtn').className='admin-badge';
     document.getElementById('authBtn').innerHTML='&#9989; Admin Mode';
@@ -615,11 +624,10 @@ function renderMatrix(){
 function togglePayment(mId, payKey, monthIdx, isPaid){
   if(!isAdmin||!db)return;
   if(isPaid){
-    // undo payment
-    if(!confirm('Remove payment for '+MONTHS[monthIdx]+'?'))return;
+    const m=Object.values(S.members).find(x=>x.id===mId);
+    if(!confirm('Remove '+MONTHS[monthIdx]+' payment for '+( m?m.name:'this member')+'?'))return;
     if(payKey) remove(ref(db,'garrison/payments/'+payKey));
   } else {
-    // mark as paid
     const existing=Object.values(S.payments).find(p=>p.memberId===mId&&p.monthIdx===monthIdx);
     if(existing)return;
     const newRef=push(ref(db,'garrison/payments'));
@@ -688,10 +696,16 @@ async function seedDataIfEmpty(){
     await set(nr, {id:nr.key, memberId:mKey, monthIdx:p.monthIdx, amount:500, date:'imported'});
   }
 
-  await set(ref(db,'garrison/currentMonth'), 1);
+  await set(ref(db,'garrison/currentMonth'), 4); // May (0=Jan, 4=May)
   console.log('Seed complete!');
 }
 
+// Restore admin UI state if session active
+if(isAdmin){
+  document.getElementById('authBtn').className='admin-badge';
+  document.getElementById('authBtn').innerHTML='&#9989; Admin Mode';
+  document.getElementById('viewerNotice').style.display='none';
+}
 initFirebase(FIREBASE_URL);
 renderDashboard();
 // Call seed after short delay to ensure db is ready
